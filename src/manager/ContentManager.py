@@ -28,7 +28,7 @@ class ContentManager(ModelManager):
         "name CHAR(255)",
         "type CHAR(30)",
         "location TEXT",
-        "duration INTEGER",
+        "duration FLOAT",
         "folder_id INTEGER",
         "created_by CHAR(255)",
         "updated_by CHAR(255)",
@@ -236,7 +236,7 @@ class ContentManager(ModelManager):
         location = content.location
 
         if content.type == ContentType.YOUTUBE:
-            location = "https://www.youtube.com/watch?v={}".format(content.location)
+            location = content.location
         elif content.has_file() or content.type == ContentType.EXTERNAL_STORAGE:
             location = "{}/{}".format(
                 var_external_url if len(var_external_url) > 0 else "",
