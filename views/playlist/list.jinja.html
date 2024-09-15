@@ -1,0 +1,146 @@
+{% extends 'base.jinja.html' %}
+
+{% block page_title %}
+    {{ l.playlist_page_title }}
+{% endblock %}
+
+{% block add_css %}
+    {{ HOOK(H_PLAYLIST_CSS) }}
+    <link rel="stylesheet" href="{{ STATIC_PREFIX }}css/lib/jquery-explr-1.4.css"/>
+    <link rel="stylesheet" href="{{ STATIC_PREFIX }}css/lib/flatpickr.min.css"/>
+{% endblock %}
+
+{% block add_js %}
+    <script type="text/javascript">
+        var route_slide_position = '{{ url_for('slideshow_slide_position') }}';
+        var choices_translations = {
+            'loop': '{{ l.slideshow_slide_form_label_cron_scheduled_loop }}',
+            'datetime': '{{ l.slideshow_slide_form_label_cron_scheduled_datetime }}',
+            'cron': '{{ l.slideshow_slide_form_label_cron_scheduled_cron }}',
+            'stayloop': '{{ l.slideshow_slide_form_label_cron_scheduled_stayloop }}',
+            'duration': '{{ l.slideshow_slide_form_label_cron_scheduled_duration }}',
+            'inweek': '{{ l.slideshow_slide_form_label_cron_scheduled_inweek }}',
+        };
+        var choices_map = {
+            'normal': {
+                'loop': {},
+                'datetime': {
+                    'stayloop': choices_translations['stayloop'],
+                    'datetime': choices_translations['datetime']
+                },
+                'inweek': {
+                    'inweek': choices_translations['inweek']
+                }
+            },
+            'notification': {
+                'datetime': {
+                    'datetime': choices_translations['datetime'],
+                    'duration': choices_translations['duration']
+                },
+                'cron': {
+                    'duration': choices_translations['duration']
+                }
+            }
+        }
+        var contents = {{ json_dumps(contents) | safe }}
+    </script>
+    <script src="{{ STATIC_PREFIX }}js/lib/jquery-explr-1.4.js"></script>
+    <script src="{{ STATIC_PREFIX }}js/lib/jquery-ui.min.js"></script>
+    <script src="{{ STATIC_PREFIX }}js/lib/flatpickr.min.js"></script>
+    <script src="{{ STATIC_PREFIX }}js/lib/tablednd-fixed.js"></script>
+    <script src="{{ STATIC_PREFIX }}js/lib/qrcode.min.js"></script>
+    <script src="{{ STATIC_PREFIX }}js/slideshow/slides.js"></script>
+    <script src="{{ STATIC_PREFIX }}js/playlist/playlists.js"></script>
+    <script src="{{ STATIC_PREFIX }}js/explorer.js"></script>
+    {{ HOOK(H_PLAYLIST_JAVASCRIPT) }}
+{% endblock %}
+
+{% block body_class %}view-playlist-list{% endblock %}
+
+{% block page %}
+    <div class="top-content">
+        <div class="top-actions">
+            {{ HOOK(H_PLAYLIST_TOOLBAR_ACTIONS_START) }}
+            <button type="button" class="btn btn-info playlist-add item-add">
+                <i class="fa fa-play icon-left"></i>
+                {{ l.playlist_button_add }}
+            </button>
+
+            {% if current_playlist %}
+                <a href="{{ url_for('playlist_delete', playlist_id=current_playlist.id) }}"
+                   class="btn btn-danger-alt protected">
+                    <i class="fa fa-trash"></i>
+                </a>
+
+                {% if not current_playlist.enabled %}
+                    <!-- disabled -->
+                {% elif current_playlist.fallback %}
+                    <!-- fallback -->
+                {% else %}
+                    <a href="{{ url_for('playlist_set_fallback', playlist_id=current_playlist.id) }}"
+                       class="btn btn-naked">
+                        <i class="fa fa-regular fa-star"></i>
+                    </a>
+                {% endif %}
+            {% endif %}
+
+            {{ HOOK(H_PLAYLIST_TOOLBAR_ACTIONS_END) }}
+        </div>
+    </div>
+
+    <div class="alert alert-info tiles-empty empty-flag {% if playlists|length != 0 %}hidden{% endif %}">
+        {{ l.playlist_panel_empty|replace(
+            '%link%',
+            ('<a href="javascript:void(0);" class="item-add playlist-add">'~l.playlist_button_add~'</a>')|safe
+        ) }}
+    </div>
+
+    {% if error %}
+        <div class="alert alert-danger">
+            {{ l[error] }}
+        </div>
+    {% endif %}
+
+    <div class="bottom-content">
+        <div class="page-panel left-panel">
+            {% with playlists=playlists %}
+                {% include 'playlist/component/table.jinja.html' %}
+            {% endwith %}
+        </div>
+
+        <div class="page-content">
+            <div class="inner">
+                {% if current_playlist %}
+                    {% with playlists=playlists %}
+                        {% include 'playlist/component/edit.jinja.html' %}
+                    {% endwith %}
+                {% else %}
+                    <div class="inner-empty empty-flag ">
+                        <i class="fa fa-play"></i>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="modals hidden">
+        <div class="modals-outer">
+            <div class="modals-inner">
+                {% include 'playlist/modal/add.jinja.html' %}
+
+                {% with is_notification=True %}{% include 'slideshow/slides/modal/edit.jinja.html' %}{% endwith %}
+                {% with is_notification=False %}{% include 'slideshow/slides/modal/edit.jinja.html' %}{% endwith %}
+                {% with is_notification=True %}{% include 'slideshow/slides/modal/add.jinja.html' %}{% endwith %}
+                {% with is_notification=False %}{% include 'slideshow/slides/modal/add.jinja.html' %}{% endwith %}
+            </div>
+        </div>
+    </div>
+
+    <div class="pickers hidden">
+        <div class="modals-outer">
+            <div class="modals-inner">
+                {% include 'slideshow/contents/modal/explr-picker.jinja.html' %}
+            </div>
+        </div>
+    </div>
+{% endblock %}

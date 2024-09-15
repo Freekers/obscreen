@@ -1,0 +1,17 @@
+services:
+  webapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: obscreen
+    restart: unless-stopped
+    environment:
+      - DEMO=false
+      - DEBUG=false
+      - SECRET_KEY=ANY_SECRET_KEY_HERE
+      - PORT=5000
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./:/app/
+    ports:
+      - 5000:5000

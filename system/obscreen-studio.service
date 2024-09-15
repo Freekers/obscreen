@@ -1,0 +1,17 @@
+[Unit]
+Description=Obscreen Studio
+After=network.target
+
+[Service]
+User=pi
+Group=pi
+Environment=VIRTUAL_ENV="/home/pi/obscreen/venv"
+WorkingDirectory=/home/pi/obscreen
+ExecStart=/home/pi/obscreen/venv/bin/python /home/pi/obscreen/obscreen.py
+Restart=always
+RestartSec=5
+StandardOutput=inherit
+StandardError=inherit
+
+[Install]
+WantedBy=multi-user.target

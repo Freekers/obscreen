@@ -1,0 +1,209 @@
+import os
+import json
+import logging
+import hashlib
+
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict
+from flask import Flask, render_template, redirect, request, url_for, send_from_directory, jsonify, abort, send_file, Response
+from pathlib import Path
+
+from src.model.entity.Slide import Slide
+from src.model.entity.Content import Content
+from src.model.enum.ContentType import ContentType
+from src.exceptions.NoFallbackPlaylistException import NoFallbackPlaylistException
+from src.service.ModelStore import ModelStore
+from src.interface.ObController import ObController
+from src.util.utils import get_safe_cron_descriptor, is_cron_in_datetime_moment, is_cron_in_week_moment, is_now_after_cron_date_time_moment, is_now_after_cron_week_moment, decode_uri_component
+from src.util.UtilNetwork import get_network_interfaces
+from src.model.enum.AnimationSpeed import animation_speed_duration
+
+
+class PlayerController(ObController):
+
+    def register(self):
+        self._app.add_url_rule('/', 'player', self.player, methods=['GET'])
+        self._app.add_url_rule('/use/<playlist_slug_or_id>', 'player_use', self.player, methods=['GET'])
+        self._app.add_url_rule('/player/default', 'player_default', self.player_default, methods=['GET'])
+        self._app.add_url_rule('/player/playlist', 'player_playlist', self.player_playlist, methods=['GET'])
+        self._app.add_url_rule('/player/playlist/use/<playlist_slug_or_id>', 'player_playlist_use', self.player_playlist, methods=['GET'])
+        self._app.add_url_rule('/serve/content/<content_type>/<content_id>/<content_location>', 'serve_content_file', self.serve_content_file, methods=['GET'])
+
+    def player(self, playlist_slug_or_id: str = ''):
+        preview_playlist = request.args.get('preview_playlist')
+        preview_content_id = request.args.get('preview_content_id')
+        playlist_slug_or_id = self._get_dynamic_playlist_id(playlist_slug_or_id)
+
+        query = " (slug = ? OR id = ?) "
+        query_args = {
+            "slug": playlist_slug_or_id,
+            "id": playlist_slug_or_id,
+        }
+
+        if not preview_playlist:
+            query = query + " AND enabled = ? "
+            query_args["enabled"] = True
+
+        current_playlist = self._model_store.playlist().get_one_by(query, query_args)
+
+        if playlist_slug_or_id and not current_playlist:
+            return abort(404)
+
+        playlist_id = current_playlist.id if current_playlist else None
+
+        try:
+            items = self._get_playlist(playlist_id=playlist_id, preview_content_id=preview_content_id)
+        except NoFallbackPlaylistException:
+            return redirect(url_for('player_default', noplaylist=1))
+
+        intro_slide_duration = 0 if items['preview_mode'] else int(request.args.get('intro', self._model_store.variable().get_one_by_name('intro_slide_duration').eval()))
+        animation_enabled = bool(int(request.args.get('animation', int(self._model_store.variable().get_one_by_name('slide_animation_enabled').eval()))))
+        polling_interval = int(request.args.get('polling', self._model_store.variable().get_one_by_name('polling_interval').eval()))
+        slide_animation_speed = request.args.get('animation_speed', self._model_store.variable().get_one_by_name('slide_animation_speed').eval()).lower()
+        slide_animation_entrance_effect = request.args.get('animation_effect', self._model_store.variable().get_one_by_name('slide_animation_entrance_effect').eval())
+        slide_animation_exit_effect = request.args.get('slide_animation_exit_effect', self._model_store.variable().get_one_by_name('slide_animation_exit_effect').eval())
+
+        return render_template(
+            'player/player.jinja.html',
+            items=items,
+            intro_slide_duration=intro_slide_duration,
+            polling_interval=polling_interval,
+            slide_animation_enabled=animation_enabled,
+            slide_animation_entrance_effect=slide_animation_entrance_effect,
+            slide_animation_exit_effect=slide_animation_exit_effect,
+            slide_animation_speed=slide_animation_speed,
+            animation_speed_duration=animation_speed_duration,
+        )
+
+    def player_default(self):
+        return render_template(
+            'player/default.jinja.html',
+            interfaces=[iface['ip_address'] for iface in get_network_interfaces()],
+            external_url=self._model_store.variable().get_one_by_name('external_url').as_string().strip(),
+            time_with_seconds=self._model_store.variable().get_one_by_name('default_slide_time_with_seconds'),
+            noplaylist=request.args.get('noplaylist', '0') == '1',
+            hard_refresh_request=self._model_store.variable().get_one_by_name("refresh_player_request").as_int()
+        )
+
+    def player_playlist(self, playlist_slug_or_id: str = ''):
+        playlist_slug_or_id = self._get_dynamic_playlist_id(playlist_slug_or_id)
+
+        current_playlist = self._model_store.playlist().get_one_by("slug = ? OR id = ?", {
+            "slug": playlist_slug_or_id,
+            "id": playlist_slug_or_id
+        })
+        playlist_id = current_playlist.id if current_playlist else None
+
+        try:
+            return jsonify(self._get_playlist(playlist_id=playlist_id))
+        except NoFallbackPlaylistException:
+            abort(404)
+
+    def _get_dynamic_playlist_id(self, playlist_slug_or_id: Optional[str]) -> str:
+        return playlist_slug_or_id
+
+    def _get_playlist(self, playlist_id: Optional[int] = 0, preview_content_id: Optional[int] = None) -> dict:
+        preview_content = self._model_store.content().get(preview_content_id) if preview_content_id else None
+        preview_mode = preview_content is not None
+
+        if playlist_id == 0 or not playlist_id:
+            playlist = self._model_store.playlist().get_one_by(query="fallback = 1")
+
+            if playlist:
+                playlist_id = playlist.id
+            elif not preview_mode:
+                raise NoFallbackPlaylistException()
+
+        enabled_slides = [Slide(content_id=preview_content.id, duration=1000000)] if preview_mode else self._model_store.slide().get_slides(enabled=True, playlist_id=playlist_id)
+        slides = self._model_store.slide().to_dict(enabled_slides)
+        contents = self._model_store.content().get_all_indexed()
+        playlist = self._model_store.playlist().get(playlist_id)
+        position = 9999
+
+        playlist_loop = []
+        playlist_notifications = []
+
+        for slide in slides:
+            if not slide['content_id']:
+                continue
+
+            if int(slide['content_id']) not in contents:
+                continue
+
+            content = contents[int(slide['content_id'])]
+            slide['name'] = content.name
+            slide['type'] = content.type.value
+            slide['location'] = self._model_store.content().resolve_content_location(content)
+            self._check_slide_enablement(playlist_loop, playlist_notifications, slide)
+
+
+        playlists = {
+            'playlist_id': playlist.id if playlist else None,
+            'time_sync': playlist.time_sync if playlist else False,
+            'loop': playlist_loop,
+            'preview_mode': preview_mode,
+            'notifications': playlist_notifications,
+            'hard_refresh_request': self._model_store.variable().get_one_by_name("refresh_player_request").as_int()
+        }
+
+        return playlists
+
+    def _check_slide_enablement(self, loop: List, notifications: List, slide: Dict) -> None:
+        is_in_datetime_moment_start = 'cron_schedule' in slide and slide['cron_schedule'] and get_safe_cron_descriptor(slide['cron_schedule']) and is_cron_in_datetime_moment(slide['cron_schedule'])
+        is_in_datetime_moment_end = 'cron_schedule_end' in slide and slide['cron_schedule_end'] and get_safe_cron_descriptor(slide['cron_schedule_end']) and is_cron_in_datetime_moment(slide['cron_schedule_end'])
+        is_in_week_moment_start = 'cron_schedule' in slide and slide['cron_schedule'] and get_safe_cron_descriptor(slide['cron_schedule']) and is_cron_in_week_moment(slide['cron_schedule'])
+        is_in_week_moment_end = 'cron_schedule_end' in slide and slide['cron_schedule_end'] and get_safe_cron_descriptor(slide['cron_schedule_end']) and is_cron_in_week_moment(slide['cron_schedule_end'])
+
+        if slide['is_notification']:
+            if is_in_datetime_moment_start:
+                return notifications.append(slide)
+            return logging.warn('Slide \'{}\' is a notification but start date is invalid'.format(slide['name']))
+
+        if is_in_datetime_moment_start:
+            if not is_now_after_cron_date_time_moment(slide['cron_schedule']):
+                return
+        elif is_in_week_moment_start:
+            if not is_now_after_cron_week_moment(slide['cron_schedule']):
+                return
+
+        if is_in_datetime_moment_end:
+            if is_now_after_cron_date_time_moment(slide['cron_schedule_end']):
+                return
+        elif is_in_week_moment_end:
+            if is_now_after_cron_week_moment(slide['cron_schedule_end']):
+                return
+
+        loop.append(slide)
+
+    def serve_content_file(self, content_location, content_type, content_id):
+        content = self._model_store.content().get(content_id)
+
+        if not content:
+            abort(404, 'Content not found')
+
+        content_location = decode_uri_component(content_location)
+
+        content_path = str(Path(self.get_application_dir(), content_location))
+
+        if not os.path.exists(content_path) or '..' in content_path:
+            abort(404, 'Content not found')
+
+        if not self._model_store.variable().get_one_by_name('player_content_cache').as_bool():
+            response = send_file(content_path)
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            return response
+
+        content_path_hash = hashlib.sha256(str(content_path).encode()).hexdigest()
+        etag = f'"{content_path_hash}-{content_id}-{os.path.getmtime(content_path)}"'
+
+        if_none_match = request.headers.get('If-None-Match')
+        if if_none_match == etag:
+            return Response(status=304)
+
+        response = send_file(content_path)
+        response.headers['Cache-Control'] = 'public, max-age=3153600000'  # 100 years
+        response.headers['ETag'] = etag
+
+        return response

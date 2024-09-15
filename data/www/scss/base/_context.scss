@@ -1,0 +1,48 @@
+main {
+
+	.context-bar {
+		padding: 10px;
+		position: sticky;
+		top: 0;
+		z-index: 1000;
+		max-height: 80px;
+		border-bottom: $layoutBorder;
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+
+		.context-menu {
+			flex: 1;
+			min-height:76px;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+
+			.inner {
+				display: flex;
+
+				ul.pills {
+					margin: 0;
+				}
+			}
+		}
+
+		.context-divider {
+			width: 1px;
+			height: 100%;
+			background: $gscale2;
+			margin-left: 20px;
+			margin-right: 20px;
+		}
+
+		.context-tail {
+			margin-right: 20px;
+
+			.btn {
+				margin-right: 0;
+			}
+		}
+
+	}
+
+}

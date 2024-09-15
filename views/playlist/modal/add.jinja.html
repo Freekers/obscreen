@@ -1,0 +1,27 @@
+<div class="modal modal-playlist-add modal-playlist">
+    <h2>
+        {{ l.playlist_form_add_title }}
+    </h2>
+
+    <form class="form" action="{{ url_for('playlist_add') }}" method="POST">
+
+        <div class="form-group">
+            <label for="playlist-add-name">{{ l.playlist_form_label_name }}</label>
+            <div class="widget">
+                <input name="name" type="text" id="playlist-add-name" required="required" />
+            </div>
+        </div>
+
+        <div class="actions">
+            <button type="button" class="btn btn-naked modal-close">
+                {{ l.common_close }}
+            </button>
+            <button type="submit" class="btn btn-info">
+                <i class="fa fa-save icon-left"></i>{{ l.common_save }}
+            </button>
+            <button type="button" disabled="disabled" class="btn btn-naked hidden btn-loading">
+                {{ l.common_loading }}
+            </button>
+        </div>
+    </form>
+</div>

@@ -1,0 +1,119 @@
+{% set tclass = 'slide-' ~ ('notification-' if is_notification ) ~ 'edit' %}
+<div class="modal modal-{{ tclass }} modal-slide hidden">
+    <h2>
+        {% if is_notification %}
+            {{ l.slideshow_slide_form_edit_notification_title }}
+        {% else %}
+            {{ l.slideshow_slide_form_edit_title }}
+        {% endif %}
+    </h2>
+
+    <form class="form" action="{{ url_for('slideshow_slide_edit') }}" method="POST">
+
+        <h3>
+            {{ l.slideshow_slide_form_section_content }}
+        </h3>
+
+        <input type="hidden" name="id" id="{{ tclass }}-id"/>
+
+        <input type="hidden" name="is_notification" class="slide-is-notification" value="{{ '1' if is_notification else '0' }}" />
+
+        <div class="form-group form-group-horizontal">
+            <label for="">{{ l.slideshow_slide_form_label_enabled }}</label>
+            <div class="widget">
+                <div class="toggle">
+                    <input type="checkbox" class="trigger slide-enabled" name="enabled" value="1"  id="{{ tclass }}-enabled"/>
+                    <label for="{{ tclass }}-enabled"></label>
+                </div>
+            </div>
+        </div>
+
+
+        <div class="form-group slide-content-id-group">
+            <label for="{{ tclass }}-content-id">{{ l.slideshow_slide_form_label_content_id }}</label>
+            <div class="widget">
+                <input type="text" value="" class="disabled target-label content-explr-picker" />
+                <input type="hidden" name="content_id" id="{{ tclass }}-content-id" required="required" class="target" data-type=""></input>
+                <button type="button" class="btn btn-naked content-explr-picker">
+                    <i class="fa fa-crosshairs"></i>
+                </button>
+                <button type="button" class="btn btn-neutral hidden slide-content-show" data-route="{{ url_for('slideshow_content_show', content_id='__id__') }}">
+                    <i class="fa-solid fa-up-right-from-square"></i>
+                </button>
+            </div>
+        </div>
+
+
+        <h3 class="divide">
+            {{ l.slideshow_slide_form_section_scheduling }}
+        </h3>
+
+        <div class="form-group slide-schedule-group">
+            <label for="{{ tclass }}-cron-schedule">{{ l.slideshow_slide_form_label_cron_scheduled }}</label>
+            <div class="widget">
+                <select id="{{ tclass }}-cron-schedule-trigger" class="trigger"></select>
+                <select name="" id="{{ tclass }}-cron-schedule-weekdaypicker" class="input-naked weekdaypicker">
+                    {% for day_number in range(1,8) %}
+                        <option value="{{ day_number }}">
+                            {{ t('basic_day_' ~ day_number) }}
+                        </option>
+                    {% endfor %}
+                </select>
+                <input type="text" id="{{ tclass }}-cron-schedule-datetimepicker" class="input-naked datetimepicker"
+                       value=""
+                       placeholder="{{ l.slideshow_slide_form_label_cron_scheduled_datetime_placeholder }}"/>
+                <input type="text" name="cron_schedule" id="{{ tclass }}-cron-schedule" class="target hidden"
+                       placeholder="{{ l.slideshow_slide_form_widget_cron_scheduled_placeholder }}"/>
+            </div>
+        </div>
+
+        <div class="form-group slide-schedule-end-group">
+            <label for="{{ tclass }}-cron-schedule-end">{{ l.slideshow_slide_form_label_cron_scheduled_end }}</label>
+            <div class="widget">
+                <select id="{{ tclass }}-cron-schedule-end-trigger" class="trigger"></select>
+                <select name="" id="{{ tclass }}-cron-schedule-end-weekdaypicker" class="input-naked weekdaypicker">
+                    {% for day_number in range(1,8) %}
+                        <option value="{{ day_number }}">
+                            {{ t('basic_day_' ~ day_number) }}
+                        </option>
+                    {% endfor %}
+                </select>
+                <input type="text" id="{{ tclass }}-cron-schedule-end-datetimepicker" class="input-naked datetimepicker"
+                       value=""
+                       placeholder="{{ l.slideshow_slide_form_label_cron_scheduled_datetime_placeholder }}"/>
+                <input type="text" name="cron_schedule_end" id="{{ tclass }}-cron-schedule-end" class="target hidden"
+                       placeholder="{{ l.slideshow_slide_form_widget_cron_scheduled_placeholder }}"/>
+            </div>
+        </div>
+
+        <div class="form-group form-group-horizontal slide-delegate-duration-group">
+            <label for="">{{ l.slideshow_slide_form_label_delegate_duration }}</label>
+            <div class="widget">
+                <div class="toggle">
+                    <input type="checkbox" name="delegate_duration" class="slide-delegate-duration" id="{{ tclass }}-delegate-duration" value="1" disabled />
+                    <label for="{{ tclass }}-delegate-duration"></label>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group slide-duration-group">
+            <label for="{{ tclass }}-duration">{{ l.slideshow_slide_form_label_duration }}</label>
+            <div class="widget widget-unit">
+                <input type="number" name="duration" id="{{ tclass }}-duration" required="required" min="0" />
+                <span class="unit">{{ l.slideshow_slide_form_label_duration_unit }}</span>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button type="button" class="btn btn-naked modal-close">
+                {{ l.common_close }}
+            </button>
+            <button type="submit" class="btn btn-info">
+                <i class="fa fa-save icon-left"></i>{{ l.common_save }}
+            </button>
+            <button type="button" disabled="disabled" class="btn btn-naked hidden btn-loading">
+                {{ l.common_loading }}
+            </button>
+        </div>
+    </form>
+</div>
